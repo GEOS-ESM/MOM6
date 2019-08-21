@@ -429,6 +429,11 @@ set (SRCS
    pkg/GSW-Fortran/toolbox/gsw_util_sort_real.f90
    pkg/GSW-Fortran/toolbox/gsw_util_xinterp1.f90
    pkg/GSW-Fortran/toolbox/gsw_z_from_p.f90
+   pkg/MOM6_DA_hooks/src/core/ocean_da_core.F90
+   pkg/MOM6_DA_hooks/src/core/ocean_da_types.F90
+   pkg/MOM6_DA_hooks/src/core/write_ocean_obs.F90
+   config_src/coupled_driver/MOM_surface_forcing.F90
+   config_src/coupled_driver/ocean_model_MOM.F90
 )
 
 
