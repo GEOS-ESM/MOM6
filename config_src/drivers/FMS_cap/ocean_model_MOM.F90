@@ -22,6 +22,7 @@ use MOM_coupler_types, only : coupler_1d_bc_type, coupler_2d_bc_type
 use MOM_coupler_types, only : coupler_type_spawn, coupler_type_write_chksums
 use MOM_coupler_types, only : coupler_type_initialized, coupler_type_copy_data
 use MOM_coupler_types, only : coupler_type_set_diags, coupler_type_send_data
+use MOM_tracer_types,  only : tracer_type, tracer_registry_type
 use MOM_diag_mediator, only : diag_ctrl, enable_averages, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
 use MOM_domains, only : MOM_domain_type, domain2d, clone_MOM_domain, get_domain_extent
@@ -50,7 +51,7 @@ use MOM_time_manager, only : real_to_time, time_type_to_real
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
 use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : surface
+use MOM_variables, only : surface, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf, only : initialize_ice_shelf_fluxes, initialize_ice_shelf_forces
@@ -77,6 +78,11 @@ public ocean_public_type_chksum
 public ocean_model_data_get
 public get_ocean_grid
 public ocean_model_get_UV_surf
+public ocean_model_get_3D_tmask
+public ocean_model_get_thickness
+public ocean_model_get_prog_tracer
+public ocean_model_put_prog_tracer
+public ocean_model_get_prog_tracer_index
 
 !> This interface extracts a named scalar field or array from the ocean surface or public type
 interface ocean_model_data_get
@@ -138,6 +144,7 @@ end type ocean_public_type
 type, public :: ocean_state_type ; private
   ! This type is private, and can therefore vary between different ocean models.
   logical :: is_ocean_PE = .false.  !< True if this is an ocean PE.
+  real, dimension(:,:,:), pointer   :: h => NULL()    !< layer thickness [H ~> m or kg m-2]
   type(time_type) :: Time     !< The ocean model's time and master clock.
   type(time_type) :: Time_dyn !< The ocean model's time for the dynamics.  Time and Time_dyn
                               !! should be the same after a full time step.
@@ -196,6 +203,9 @@ type, public :: ocean_state_type ; private
   type(unit_scale_type), pointer :: &
     US => NULL()              !< A pointer to a structure containing dimensional
                               !! unit scaling factors.
+  type(tracer_registry_type), pointer :: &
+    Reg => NULL ()            !< A pointer to a structure containing MOM tracer registry
+  type(thermo_var_ptrs) :: tv !< structure containing pointers to available thermodynamic fields
   type(MOM_control_struct) :: MOM_CSp
                               !< MOM control structure
   type(ice_shelf_CS), pointer :: &
@@ -279,8 +289,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
                       Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
                       diag_ptr=OS%diag, count_calls=.true., ice_shelf_CSp=OS%ice_shelf_CSp, &
                       waves_CSp=OS%Waves)
-  call get_MOM_state_elements(OS%MOM_CSp, G=OS%grid, GV=OS%GV, US=OS%US, C_p=OS%C_p, &
-                              C_p_scaled=OS%fluxes%C_p, use_temp=use_temperature)
+  call get_MOM_state_elements(OS%MOM_CSp, G=OS%grid, GV=OS%GV, US=OS%US, Reg=OS%Reg, Tv=OS%Tv, &
+                              C_p=OS%C_p, C_p_scaled=OS%fluxes%C_p, h=OS%h, use_temp=use_temperature)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -1211,4 +1221,136 @@ subroutine ocean_model_get_UV_surf(OS, Ocean, name, array2D, isc, jsc)
 
 end subroutine ocean_model_get_UV_surf
 
+
+! Return index of a prognostic tracer from the tracer package
+subroutine ocean_model_get_prog_tracer_index(OS, index, name)
+  type(ocean_state_type), pointer    :: OS
+  character(*), intent(in)           :: name
+  integer, intent(out)               :: index
+  integer                            :: n, ntr
+  type(tracer_registry_type),pointer :: Reg => NULL()
+
+  if (.not.associated(OS)) return
+  if (.not.OS%is_ocean_pe) return
+
+  Reg => OS%Reg
+  ntr=Reg%ntr
+
+  index = -1
+
+  do n= 1, ntr
+     if (Reg%tr(n)%name == name) index = n
+  enddo
+
+end subroutine ocean_model_get_prog_tracer_index
+
+
+! Modify prognostic tracer data for external generic tracers
+
+subroutine ocean_model_put_prog_tracer(OS, index, array)
+  type(ocean_state_type), pointer     :: OS
+  integer, intent(in)                 :: index
+  real, dimension(:,:,:), intent(in)  :: array
+  integer                             :: isc, iec, jsc, jec, nk, i, j, k,  &
+                                         isd, ied, jsd, jed, tau
+  type(tracer_type), dimension(:), pointer :: T_prog => NULL()
+
+  if (.not.associated(OS)) return
+  if (.not.OS%is_ocean_pe) return
+
+  call get_domain_extent(OS%grid%Domain, isc, iec, jsc, jec, isd, ied, jsd, jed)
+  nk  = OS%GV%ke
+ 
+  T_prog => OS%Reg%tr
+
+  do k=1,nk
+     do j=jsc,jec
+        do i=isc,iec
+           T_prog(index)%t(i,j,k) = array(i,j,k)
+        enddo
+     enddo
+  enddo
+
+  call pass_var(T_prog(index)%t(:,:,:), OS%grid%domain)
+
+end subroutine ocean_model_put_prog_tracer
+
+! Return prognostic tracer data
+subroutine ocean_model_get_prog_tracer(OS, index, array, is, js, units, longname)
+  type(ocean_state_type), pointer          :: OS
+  integer, intent(in)                      :: index
+  integer, optional, intent(in)            :: is  
+  integer, optional, intent(in)            :: js 
+  real,    intent(out)                     :: array(:,:,:)
+  integer                                  :: isc, iec, jsc, jec, nk, i, j, k, &
+                                              isd, ied, jsd, jed, tau
+  character(len=*), optional, intent(out)  :: units
+  character(len=*), optional, intent(out)  :: longname
+  type(tracer_type), dimension(:), pointer :: T_prog => NULL()
+
+  if (.not.associated(OS)) return
+  if (.not.OS%is_ocean_pe) return
+
+  call get_domain_extent(OS%grid%Domain, isc, iec, jsc, jec, isd, ied, jsd, jed)
+  nk  = OS%GV%ke
+
+  T_prog => OS%Reg%tr
+
+  if (index == 1) T_prog(index)%t => OS%Tv%T
+
+  do k=1,nk
+     do j=jsc,jec
+        do i=isc,iec
+          array(i,j,k)=  T_prog(index)%t(i,j,k) 
+        enddo
+     enddo
+  enddo
+
+  if(present(units   )) units    = T_prog(index)%units
+  if(present(longname)) longname = T_prog(index)%longname
+
+end subroutine ocean_model_get_prog_tracer
+
+!Return layer thickness
+subroutine ocean_model_get_thickness(OS, array, is, js)
+  type(ocean_state_type), pointer          :: OS
+  real,    intent(out)                     :: array(:,:,:) 
+  integer, optional, intent(in)            :: is
+  integer, optional, intent(in)            :: js
+  integer                                  :: isc, iec, jsc, jec, nk, i, j, k, &
+                                              isd, ied, jsd, jed
+
+  if (.not.associated(OS)) return
+  if (.not.OS%is_ocean_pe) return
+
+  call get_domain_extent(OS%grid%Domain, isc, iec, jsc, jec, isd, ied, jsd, jed)
+  nk  = OS%GV%ke
+  
+  do k=1,nk
+     do j=jsc,jec
+        do i=isc,iec
+           array(i,j,k) = OS%h(i,j,k)
+        enddo
+     enddo
+  enddo
+
+end subroutine ocean_model_get_thickness
+
+! Return 3D masks for cell-center points
+subroutine ocean_model_get_3D_tmask(OS, array)
+  type(ocean_state_type), pointer          :: OS
+  real, dimension(:,:,:), intent(out)      :: array
+  integer                                  :: isc, iec, jsc, jec, nk, i, j, k, &
+                                              isd, ied, jsd, jed
+  if (.not.associated(OS)) return
+  if (.not.OS%is_ocean_pe) return
+  
+  call get_domain_extent(OS%grid%Domain, isc, iec, jsc, jec, isd, ied, jsd, jed)
+
+  array = OS%diag%remap_axesTL(1)%mask3d(isc:iec,jsc:jec,:)
+ 
+end subroutine ocean_model_get_3D_tmask
+
 end module ocean_model_mod
+
+
