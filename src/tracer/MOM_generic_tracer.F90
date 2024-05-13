@@ -133,7 +133,7 @@ contains
     !Register all the generic tracers used and create the list of them.
     !This can be called by ALL PE's. No array fields allocated.
     if (.not. g_registered) then
-      call generic_tracer_register()
+      call generic_tracer_register(param_file=param_file)
       g_registered = .true.
     endif
 
@@ -942,14 +942,15 @@ contains
   end subroutine MOM_generic_tracer_surface_state
 
 !ALL PE subroutine on Ocean!  Due to otpm design the fluxes should be initialized like this on ALL PE's!
-  subroutine MOM_generic_flux_init(verbosity)
+  subroutine MOM_generic_flux_init(verbosity, param_file)
     integer, optional, intent(in) :: verbosity  !< A 0-9 integer indicating a level of verbosity.
+    type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
 
     character(len=128), parameter :: sub_name = 'MOM_generic_flux_init'
     type(g_tracer_type), pointer :: g_tracer_list,g_tracer,g_tracer_next
 
     if (.not. g_registered) then
-      call generic_tracer_register()
+      call generic_tracer_register(param_file=param_file)
       g_registered = .true.
     endif
 

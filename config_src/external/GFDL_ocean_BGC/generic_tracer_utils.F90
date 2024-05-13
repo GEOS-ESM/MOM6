@@ -380,8 +380,8 @@ module g_tracer_utils
   public :: g_tracer_is_prog
   public :: g_tracer_vertdiff_G
   public :: g_tracer_vertdiff_M
-!  public :: g_tracer_start_param_list
-!  public :: g_tracer_end_param_list
+  public :: g_tracer_start_param_list
+  public :: g_tracer_end_param_list
   public :: g_diag_type
   public :: g_diag_field_add
   public :: g_tracer_set_pointer
@@ -550,24 +550,24 @@ contains
   !  </IN>
   ! </SUBROUTINE>
 
-!  subroutine g_tracer_start_param_list(package_name)
-!    character(len=fm_string_len), intent(in) :: package_name
-!    character(len=fm_string_len), parameter  :: sub_name = 'g_tracer_start_param_list'
-!    character(len=fm_string_len) :: list_path
-!    integer                      :: list_index
+  subroutine g_tracer_start_param_list(package_name)
+    character(len=fm_string_len), intent(in) :: package_name
+    character(len=fm_string_len), parameter  :: sub_name = 'g_tracer_start_param_list'
+    character(len=fm_string_len) :: list_path
+    integer                      :: list_index
 
-!    list_path = '/ocean_mod/namelists/' // trim(package_name) // '/'
+    list_path = '/ocean_mod/namelists/' // trim(package_name) // '/'
 
-!    list_index = fm_new_list(list_path)
-!    if (list_index .le. 0) then  !{
-!       call MOM_error(FATAL, trim(sub_name) // ' Could not make  the new list' // list_path)
-!    endif  !}
+    list_index = fm_new_list(list_path)
+    if (list_index .le. 0) then  !{
+       call MOM_error(FATAL, trim(sub_name) // ' Could not make  the new list' // list_path)
+    endif  !}
     
-!    if (.not. fm_change_list(list_path)) then  !{
-!       call MOM_error(FATAL, trim(sub_name) // ' Could not change to the new list' // list_path)
-!    endif  !}
+    if (.not. fm_change_list(list_path)) then  !{
+       call MOM_error(FATAL, trim(sub_name) // ' Could not change to the new list' // list_path)
+    endif  !}
 
-!  end subroutine g_tracer_start_param_list
+  end subroutine g_tracer_start_param_list
 
   ! <SUBROUTINE NAME="g_tracer_end_param_list">
   !  <OVERVIEW>
@@ -587,10 +587,10 @@ contains
   !  </IN>
   ! </SUBROUTINE>
 
-!  subroutine g_tracer_end_param_list(package_name)
-!    character(len=fm_string_len) :: package_name
+  subroutine g_tracer_end_param_list(package_name)
+    character(len=fm_string_len) :: package_name
 
-!  end subroutine g_tracer_end_param_list
+  end subroutine g_tracer_end_param_list
 
   !Overload interface g_tracer_add_param for real parameter
   subroutine g_tracer_add_param_real(name, var,  value)
@@ -3625,7 +3625,7 @@ contains
     verbose = 5
     if (present(verbosity)) verbose = verbosity
 
-    if (verbose >= 5) then
+    if (verbose >= 20) then
        write(errorstring, '(a)')  ': Dumping generic tracer namelists tree: '
        call MOM_error(NOTE, trim(sub_name) //  trim(errorstring))    
 

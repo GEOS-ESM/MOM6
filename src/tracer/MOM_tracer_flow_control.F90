@@ -142,7 +142,7 @@ subroutine call_tracer_flux_init(verbosity)
 
   if (use_OCMIP_CFCs) call flux_init_OCMIP2_CFC(verbosity=verbosity)
   if (use_MOM_generic_tracer) then
-    call MOM_generic_flux_init(verbosity=verbosity)
+    call MOM_generic_flux_init(verbosity=verbosity, param_file=param_file)
   endif
 
 end subroutine call_tracer_flux_init
