@@ -1246,7 +1246,6 @@ end subroutine ocean_model_get_prog_tracer_index
 
 
 ! Modify prognostic tracer data for external generic tracers
-
 subroutine ocean_model_put_prog_tracer(OS, index, array)
   type(ocean_state_type), pointer     :: OS
   integer, intent(in)                 :: index
@@ -1263,13 +1262,7 @@ subroutine ocean_model_put_prog_tracer(OS, index, array)
  
   T_prog => OS%Reg%tr
 
-  do k=1,nk
-     do j=jsc,jec
-        do i=isc,iec
-           T_prog(index)%t(i,j,k) = array(i,j,k)
-        enddo
-     enddo
-  enddo
+  T_prog(index)%t(isc:iec,jsc:jec,:)=array
 
   call pass_var(T_prog(index)%t(:,:,:), OS%grid%domain)
 
@@ -1279,9 +1272,9 @@ end subroutine ocean_model_put_prog_tracer
 subroutine ocean_model_get_prog_tracer(OS, index, array, is, js, units, longname)
   type(ocean_state_type), pointer          :: OS
   integer, intent(in)                      :: index
-  integer, optional, intent(in)            :: is  
-  integer, optional, intent(in)            :: js 
-  real,    intent(out)                     :: array(:,:,:)
+  integer, intent(in)                      :: is
+  integer, intent(in)                      :: js
+  real,    intent(out)                     :: array(is:,js:,:)
   integer                                  :: isc, iec, jsc, jec, nk, i, j, k, &
                                               isd, ied, jsd, jed, tau
   character(len=*), optional, intent(out)  :: units
@@ -1296,14 +1289,14 @@ subroutine ocean_model_get_prog_tracer(OS, index, array, is, js, units, longname
 
   T_prog => OS%Reg%tr
 
-  if (index == 1) T_prog(index)%t => OS%Tv%T
-
+!  if (index == 1) T_prog(index)%t => OS%Tv%T
+  
   do k=1,nk
-     do j=jsc,jec
-        do i=isc,iec
-          array(i,j,k)=  T_prog(index)%t(i,j,k) 
-        enddo
-     enddo
+    do i=isc,iec
+      do j=jsc,jec
+         array(is+i-isc,js+j-jsc,k)=T_prog(index)%t(i,j,k)
+      enddo
+    enddo
   enddo
 
   if(present(units   )) units    = T_prog(index)%units
@@ -1314,9 +1307,9 @@ end subroutine ocean_model_get_prog_tracer
 !Return layer thickness
 subroutine ocean_model_get_thickness(OS, array, is, js)
   type(ocean_state_type), pointer          :: OS
-  real,    intent(out)                     :: array(:,:,:) 
-  integer, optional, intent(in)            :: is
-  integer, optional, intent(in)            :: js
+  integer, intent(in)                      :: is
+  integer, intent(in)                      :: js
+  real,    intent(out)                     :: array(is:,js:,:) 
   integer                                  :: isc, iec, jsc, jec, nk, i, j, k, &
                                               isd, ied, jsd, jed
 
@@ -1324,22 +1317,17 @@ subroutine ocean_model_get_thickness(OS, array, is, js)
   if (.not.OS%is_ocean_pe) return
 
   call get_domain_extent(OS%grid%Domain, isc, iec, jsc, jec, isd, ied, jsd, jed)
-  nk  = OS%GV%ke
   
-  do k=1,nk
-     do j=jsc,jec
-        do i=isc,iec
-           array(i,j,k) = OS%h(i,j,k)
-        enddo
-     enddo
-  enddo
+  array(is:,js:,:) = OS%h(isc:iec,jsc:jec,:)
 
 end subroutine ocean_model_get_thickness
 
 ! Return 3D masks for cell-center points
-subroutine ocean_model_get_3D_tmask(OS, array)
+subroutine ocean_model_get_3D_tmask(OS, array, is, js)
   type(ocean_state_type), pointer          :: OS
-  real, dimension(:,:,:), intent(out)      :: array
+  integer, intent(in)                      :: is
+  integer, intent(in)                      :: js
+  real, intent(out)                        :: array(is:,js:,:)
   integer                                  :: isc, iec, jsc, jec, nk, i, j, k, &
                                               isd, ied, jsd, jed
   if (.not.associated(OS)) return
@@ -1347,7 +1335,7 @@ subroutine ocean_model_get_3D_tmask(OS, array)
   
   call get_domain_extent(OS%grid%Domain, isc, iec, jsc, jec, isd, ied, jsd, jed)
 
-  array = OS%diag%remap_axesTL(1)%mask3d(isc:iec,jsc:jec,:)
+  array(is:,js:,:) = OS%diag%remap_axesTL(1)%mask3d(isc:iec,jsc:jec,:)
  
 end subroutine ocean_model_get_3D_tmask
 

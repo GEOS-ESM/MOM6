@@ -50,7 +50,7 @@ module generic_GEN
   public generic_GEN_register
 
   logical, save :: do_generic_GEN  = .false.
-  integer, save :: Num_generic_GEN_Tracers = 2
+  integer, save :: Num_generic_GEN_Tracers = 0
 
 contains
 
