@@ -234,8 +234,17 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
       do j=js,je ; do I=is-1,ie
         Kh_loc = CS%KhTr
         if (use_Eady) Kh_loc = Kh_loc + CS%KhTr_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
+#if 0
         if (allocated(MEKE%Kh)) &
           Kh_loc = Kh_loc + MEKE%KhTr_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
+#else
+        if (allocated(MEKE%Kh)) then
+          if ( MEKE%Kh(i,j) * MEKE%Kh(i+1,j) < 0.0 ) then
+              print *, 'DBG ', i, j, MEKE%Kh(i,j)*MEKE%Kh(i+1,j), MEKE%Kh(i,j), MEKE%Kh(i+1,j)
+          end if
+          Kh_loc = Kh_loc + MEKE%KhTr_fac*sqrt(abs(MEKE%Kh(i,j)*MEKE%Kh(i+1,j)))
+        end if
+#endif
         if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max)
         if (Resoln_scaled) &
           Kh_loc = Kh_loc * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
@@ -252,7 +261,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
         Kh_loc = CS%KhTr
         if (use_Eady) Kh_loc = Kh_loc + CS%KhTr_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
         if (allocated(MEKE%Kh)) &
-          Kh_loc = Kh_loc + MEKE%KhTr_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
+          Kh_loc = Kh_loc + MEKE%KhTr_fac*sqrt(abs(MEKE%Kh(i,j)*MEKE%Kh(i,j+1)))
         if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max)
         if (Resoln_scaled) &
           Kh_loc = Kh_loc * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
