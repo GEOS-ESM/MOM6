@@ -1,6 +1,8 @@
 !> Top-level module for the MOM6 ocean model in coupled mode.
 module ocean_model_mod
 
+#define COUPLE_MOM6_AND_WAVES 
+
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 ! This is the top level module for the MOM6 ocean model.  It contains routines
@@ -34,6 +36,10 @@ use MOM_forcing_type, only : forcing, mech_forcing, allocate_forcing_type
 use MOM_forcing_type, only : fluxes_accumulate, get_net_mass_forcing
 use MOM_forcing_type, only : copy_back_forcing_fields
 use MOM_forcing_type, only : forcing_diagnostics, mech_forcing_diags
+#if defined COUPLE_MOM6_AND_WAVES
+use MOM_forcing_type, only : allocate_mech_forcing
+use MOM_domains, only : pass_var
+#endif
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : write_version_number, stdout_if_root
@@ -57,6 +63,9 @@ use MOM_ice_shelf, only : initialize_ice_shelf_fluxes, initialize_ice_shelf_forc
 use MOM_ice_shelf, only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
 use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
 use MOM_wave_interface, only: Update_Surface_Waves
+#if defined COUPLE_MOM6_AND_WAVES 
+use MOM_wave_interface, only: query_wave_properties
+#endif
 use iso_fortran_env, only : int64
 
 #include <MOM_memory.h>
@@ -77,6 +86,9 @@ public ocean_public_type_chksum
 public ocean_model_data_get
 public get_ocean_grid
 public ocean_model_get_UV_surf
+#if defined COUPLE_MOM6_AND_WAVES
+public query_ocean_state
+#endif
 
 !> This interface extracts a named scalar field or array from the ocean surface or public type
 interface ocean_model_data_get
@@ -151,8 +163,12 @@ type, public :: ocean_state_type ; private
   integer :: nstep = 0        !< The number of calls to update_ocean that update the dynamics.
   integer :: nstep_thermo = 0 !< The number of calls to update_ocean that update the thermodynamics.
   logical :: use_ice_shelf    !< If true, the ice shelf model is enabled.
+#if defined COUPLE_MOM6_AND_WAVES
+  logical, public :: use_waves !< If true use wave coupling.
+  character(len=40) :: wave_method !< Wave coupling method.
+#else
   logical :: use_waves        !< If true use wave coupling.
-
+#endif
   logical :: icebergs_alter_ocean !< If true, the icebergs can change ocean the
                               !! ocean dynamics and forcing fluxes.
   real :: press_to_z          !< A conversion factor between pressure and ocean depth,
@@ -179,7 +195,7 @@ type, public :: ocean_state_type ; private
                               !! processes before time stepping the dynamics.
 
   type(directories) :: dirs   !< A structure containing several relevant directory paths.
-  type(mech_forcing)          :: forces  !< A structure with the driving mechanical surface forces
+  type(mech_forcing)          :: forces  !WW3 !< A structure with the driving mechanical surface forces
   type(forcing)               :: fluxes  !< A structure containing pointers to
                                                     !! the thermodynamic ocean forcing fields.
   type(forcing)               :: flux_tmp !< A secondary structure containing pointers to the
@@ -204,9 +220,14 @@ type, public :: ocean_state_type ; private
                               !! is null if there is no ice shelf.
   type(marine_ice_CS), pointer :: &
     marine_ice_CSp => NULL()  !< A pointer to the control structure for the
-                              !! marine ice effects module.
+                              !! marine ice effects module
+#if defined COUPLE_MOM6_AND_WAVES
+  type(wave_parameters_cs), pointer, public :: &
+    Waves => NULL() !WW3      !< A pointer to the surface wave control structure
+#else
   type(wave_parameters_cs), pointer :: &
-    Waves => NULL()           !< A pointer to the surface wave control structure
+    Waves => NULL() !WW3      !< A pointer to the surface wave control structure
+#endif
   type(surface_forcing_CS), pointer :: &
     forcing_CSp => NULL()     !< A pointer to the MOM forcing control structure
   type(diag_ctrl), pointer :: &
@@ -255,6 +276,12 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
                                 ! surface velocities returned to the coupler.
   type(param_file_type) :: param_file !< A structure to parse for run-time parameters
   logical :: use_temperature ! If true, temperature and salinity are state variables.
+
+#if defined COUPLE_MOM6_AND_WAVES
+!  logical :: use_waves
+!  character(len=48) :: wave_method
+!  integer :: num_stk_bands
+#endif
 
   call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
   if (associated(OS)) then
@@ -362,16 +389,33 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
     use_melt_pot=.false.
   endif
 
+#if defined COUPLE_MOM6_AND_WAVES
+  if (OS%Use_Waves) then
+    call get_param(param_file, mdl, "WAVE_METHOD", OS%wave_method, default="EMPTY", do_not_log=.true.)
+  endif
+#endif
+
+
   !allocate(OS%sfc_state)
   call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, do_integrals=.true., &
                               gas_fields_ocn=gas_fields_ocn, use_meltpot=use_melt_pot)
 
   if (present(wind_stagger)) then
+#if defined COUPLE_MOM6_AND_WAVES
+    call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
+                              OS%forcing_CSp, wind_stagger=wind_stagger, use_waves=OS%Use_Waves)
+#else
     call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
                               OS%forcing_CSp, wind_stagger)
+#endif
   else
+#if defined COUPLE_MOM6_AND_WAVES
+    call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
+                              OS%forcing_CSp, use_waves=OS%Use_Waves)
+#else
     call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
                               OS%forcing_CSp)
+#endif
   endif
 
   if (OS%use_ice_shelf)  then
@@ -387,9 +431,23 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
 
   call get_param(param_file, mdl, "USE_WAVES", OS%Use_Waves, &
        "If true, enables surface wave modules.", default=.false.)
+
+#if defined COUPLE_MOM6_AND_WAVES
+  call allocate_forcing_type(OS%grid, OS%fluxes, waves=.true., lamult=(trim(OS%wave_method)=="EFACTOR"))
+#endif
+
   ! MOM_wave_interface_init is called regardless of the value of USE_WAVES because
   ! it also initializes statistical waves.
   call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag)
+
+#if defined COUPLE_MOM6_AND_WAVES
+  !! WW3 ?
+  print *, '*** DBG: forces = ', OS%forces%initialized, associated(OS%forces%ustkb), OS%Waves%NumBands
+
+!  call allocate_mech_forcing(OS%grid, OS%forces, waves=.true., num_stk_bands=3)
+!  print *, '*** DBG: forces = ', OS%forces%initialized, associated(OS%forces%ustkb), OS%Waves%NumBands
+#endif
+
 
   call initialize_ocean_public_type(OS%grid%Domain, Ocean_sfc, OS%diag, &
                                     gas_fields_ocn=gas_fields_ocn)
@@ -565,7 +623,54 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
     ! For now, the waves are only updated on the thermodynamics steps, because that is where
     ! the wave intensities are actually used to drive mixing.  At some point, the wave updates
     ! might also need to become a part of the ocean dynamics, according to B. Reichl.
+
+#define COUPLE_MOM6_AND_WAVES 
+#if defined COUPLE_MOM6_AND_WAVES
+    !! WW3 ?
+    print *, '*** DBG: forces = ', OS%forces%initialized, associated(OS%forces%ustkb)
+
+    !OS%forces%stk_wavenumbers = [0.04, 0.11, 0.33]
+    !OS%forces%ustkb=1.0
+    !OS%forces%vstkb=1.0
+
+    !call pass_var(OS%forces%ustkb(:,:,1), OS%grid%domain)
+    !call pass_var(OS%forces%vstkb(:,:,1), OS%grid%domain)
+    !call pass_var(OS%forces%ustkb(:,:,2), OS%grid%domain)
+    !call pass_var(OS%forces%vstkb(:,:,2), OS%grid%domain)
+    !call pass_var(OS%forces%ustkb(:,:,3), OS%grid%domain)
+    !call pass_var(OS%forces%vstkb(:,:,3), OS%grid%domain)
+
+
+    !! call query_ocean_state(OS, use_waves=use_waves, wave_method=wave_method)
+    !! if (use_waves) then
+    !!   if (wave_method == "SURFACE_BANDS") then
+    !!     call query_ocean_state(OS, NumWaveBands=Ice_ocean_boundary%num_stk_bands)
+    !!     allocate(Ice_ocean_boundary%ustkb(isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), source=0.0)
+    !!     allocate(Ice_ocean_boundary%vstkb(isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), source=0.0)
+    !!     allocate(Ice_ocean_boundary%stk_wavenumbers(Ice_ocean_boundary%num_stk_bands), source=0.0)
+    !!     call query_ocean_state(ocean_state, WaveNumbers=Ice_ocean_boundary%stk_wavenumbers, unscale=.true.)
+    !!   else
+    !!     call MOM_error(FATAL, "Unsupported WAVE_METHOD encountered in NUOPC cap.")
+    !!   endif
+    !! endif
+    !! ! Consider adding this:
+    !! ! if (.not.use_waves) Ice_ocean_boundary%num_stk_bands = 0
+
+
+
+    !! OS%forces%stk_wavenumbers = [0.04, 0.11, 0.33]
+    !! OS%forces%ustkb = 0.0 
+    !! OS%forces%vstkb = 0.0
+
+    print *, 'DBG: ocean_model_MOM.F90 OS%forces%stk_wavenumbers = ', minval(OS%forces%stk_wavenumbers), maxval(OS%forces%stk_wavenumbers)
+    print *, 'DBG: ocean_model_MOM.F90 OS%forces%ustkb = ', minval(OS%forces%ustkb), maxval(OS%forces%ustkb)
+    print *, 'DBG: ocean_model_MOM.F90 OS%forces%vstkb = ', minval(OS%forces%vstkb), maxval(OS%forces%vstkb)
+
+
+    call Update_Surface_Waves(OS%grid, OS%GV, OS%US, OS%time, ocean_coupling_time_step, OS%waves, OS%forces)
+#else
     call Update_Surface_Waves(OS%grid, OS%GV, OS%US, OS%time, ocean_coupling_time_step, OS%waves)
+#endif
   endif
 
   if ((OS%nstep==0) .and. (OS%nstep_thermo==0)) then ! This is the first call to update_ocean_model.
@@ -975,6 +1080,37 @@ subroutine ocean_model_flux_init(OS, verbosity)
   call call_tracer_flux_init(verbosity=verbose)
 
 end subroutine ocean_model_flux_init
+
+#if defined COUPLE_MOM6_AND_WAVES
+
+!> This interface allows certain properties that are stored in the ocean_state_type to be
+!! obtained.
+subroutine query_ocean_state(OS, use_waves, NumWaveBands, Wavenumbers, unscale, wave_method)
+  type(ocean_state_type),       intent(in)  :: OS      !< The structure with the complete ocean state
+  logical,            optional, intent(out) :: use_waves !< Indicates whether surface waves are in use
+  integer,            optional, intent(out) :: NumWaveBands !< If present, this gives the number of
+                                                       !! wavenumber partitions in the wave discretization
+  real, dimension(:), optional, intent(out) :: Wavenumbers !< If present, this gives the characteristic
+                                                       !! wavenumbers of the wave discretization [m-1 or Z-1 ~> m-1]
+  logical,            optional, intent(in)  :: unscale !< If present and true, undo any dimensional
+                                                       !! rescaling and return dimensional values in MKS units
+  character(len=40),  optional, intent(out) :: wave_method !< Wave coupling method.
+
+  logical :: undo_scaling
+  undo_scaling = .false. ; if (present(unscale)) undo_scaling = unscale
+
+  if (present(use_waves)) use_waves = OS%use_waves
+  if (present(NumWaveBands)) call query_wave_properties(OS%Waves, NumBands=NumWaveBands)
+  if (present(Wavenumbers) .and. undo_scaling) then
+    call query_wave_properties(OS%Waves, WaveNumbers=WaveNumbers, US=OS%US)
+  elseif (present(Wavenumbers)) then
+    call query_wave_properties(OS%Waves, WaveNumbers=WaveNumbers)
+  endif
+  if (present(wave_method)) wave_method = OS%wave_method
+
+end subroutine query_ocean_state
+
+#endif
 
 !> Ocean_stock_pe - returns the integrated stocks of heat, water, etc. for conservation checks.
 !!   Because of the way FMS is coded, only the root PE has the integrated amount,

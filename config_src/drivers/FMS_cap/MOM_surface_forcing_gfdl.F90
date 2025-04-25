@@ -1,5 +1,7 @@
 module MOM_surface_forcing_gfdl
 
+#define COUPLE_MOM6_AND_WAVES
+
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 !#CTRL# use MOM_controlled_forcing, only : apply_ctrl_forcing, register_ctrl_forcing_restarts
@@ -201,6 +203,15 @@ type, public :: ice_ocean_boundary_type
                                                             !! ice-shelves, expressed as a coefficient
                                                             !! for divergence damping, as determined
                                                             !! outside of the ocean model [m3 s-1]
+#if defined COUPLE_MOM6_AND_WAVES
+  real, pointer, dimension(:)     :: stk_wavenumbers => NULL() !< The central wave number of Stokes bands [rad/m]
+  real, pointer, dimension(:,:,:) :: ustkb           => NULL() !< Stokes Drift spectrum, zonal [m/s]
+                                                               !! Horizontal  - u points
+                                                               !! 3rd dimension - wavenumber
+  real, pointer, dimension(:,:,:) :: vstkb           => NULL() !< Stokes Drift spectrum, meridional [m/s]
+                                                               !! Horizontal  - v points
+                                                               !! 3rd dimension - wavenumber
+#endif
   integer :: xtype                    !< The type of the exchange - REGRID, REDIST or DIRECT
   type(coupler_2d_bc_type) :: fluxes  !< A structure that may contain an array of named fields
                                       !! used for passive tracer fluxes.
@@ -699,7 +710,11 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   real :: kg_m2_s_conversion  ! A combination of unit conversion factors for rescaling
                               ! mass fluxes [R Z s m2 kg-1 T-1 ~> 1]
 
+#if defined COUPLE_MOM6_AND_WAVES
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0, istk
+#else
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
+#endif
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
   integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
 
@@ -751,6 +766,15 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   forces%accumulate_rigidity = .true. ! Multiple components may contribute to rigidity.
   if (associated(forces%rigidity_ice_u)) forces%rigidity_ice_u(:,:) = 0.0
   if (associated(forces%rigidity_ice_v)) forces%rigidity_ice_v(:,:) = 0.0
+
+#if (defined COUPLE_MOM6_AND_WAVES)
+  if ( associated(IOB%stk_wavenumbers) .and. &
+       associated(IOB%ustkb) .and. &
+       associated(IOB%vstkb) &
+     ) then
+    call allocate_mech_forcing(G, forces, waves=.true., num_stk_bands=size(IOB%stk_wavenumbers))
+  endif
+#endif
 
   ! Set the weights for forcing fields that use running time averages.
   if (present(reset_avg)) then ; if (reset_avg) forces%dt_force_accum = 0.0 ; endif
@@ -844,6 +868,25 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   else
     forces%net_mass_src_set = .false.
   endif
+
+#if defined COUPLE_MOM6_AND_WAVES
+  if ( associated(IOB%stk_wavenumbers) .and. & 
+       associated(IOB%ustkb) .and. &
+       associated(IOB%vstkb) & 
+     ) then
+
+    forces%stk_wavenumbers = IOB%stk_wavenumbers * US%Z_to_m
+    do istk = 1, size(IOB%stk_wavenumbers)
+      do j=js,je; do i=is,ie
+        forces%ustkb(i,j,istk) = IOB%ustkb(i-i0,j-j0,istk) * US%m_s_to_L_T
+        forces%vstkb(i,j,istk) = IOB%vstkb(i-i0,j-j0,istk) * US%m_s_to_L_T
+      enddo; enddo
+      call pass_var(forces%ustkb(:,:,istk), G%domain )
+      call pass_var(forces%vstkb(:,:,istk), G%domain )
+    enddo
+  endif
+#endif
+
 
   ! Obtain optional ice-berg related fluxes from the IOB type:
   if (associated(IOB%area_berg)) then ; do j=js,je ; do i=is,ie
@@ -1276,7 +1319,11 @@ subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
 end subroutine forcing_save_restart
 
 !> Initialize the surface forcing, including setting parameters and allocating permanent memory.
+#if defined COUPLE_MOM6_AND_WAVES
+subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger, use_waves)
+#else
 subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
+#endif
   type(time_type),          intent(in)    :: Time !< The current model time
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
@@ -1287,7 +1334,10 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                                                   !! structure for this module
   integer,        optional, intent(in)    :: wind_stagger !< If present, the staggering of the winds
                                                   !! that are being provided in calls to update_ocean_model
-
+#if defined COUPLE_MOM6_AND_WAVES
+  logical, optional,        intent(in)    :: use_waves !< If present and true, use waves and activate
+                                                  !! the corresponding wave forcing diagnostics
+#endif
   ! Local variables
   real :: utide             ! The RMS tidal velocity [Z T-1 ~> m s-1].
   real :: Flux_const_dflt   ! A default piston velocity for restoring surface properties [m day-1]
@@ -1667,9 +1717,14 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   call get_param(param_file, mdl, "ALLOW_ICEBERG_FLUX_DIAGNOSTICS", iceberg_flux_diags, &
                  "If true, makes available diagnostics of fluxes from icebergs "//&
                  "as seen by MOM6.", default=.false.)
+
+#if defined COUPLE_MOM6_AND_WAVES
+  call register_forcing_type_diags(Time, diag, US, CS%use_temperature, CS%handles, &
+                                   use_berg_fluxes=iceberg_flux_diags, use_waves=use_waves) 
+#else
   call register_forcing_type_diags(Time, diag, US, CS%use_temperature, CS%handles, &
                                    use_berg_fluxes=iceberg_flux_diags)
-
+#endif
   call get_param(param_file, mdl, "ALLOW_FLUX_ADJUSTMENTS", CS%allow_flux_adjustments, &
                  "If true, allows flux adjustments to specified via the "//&
                  "data_table using the component name 'OCN'.", default=.false.)

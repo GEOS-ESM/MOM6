@@ -10,6 +10,7 @@ use MOM_domains,       only : pass_var, pass_vector, AGRID
 use MOM_domains,       only : To_South, To_West, To_All
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_file_parser,   only : openParameterBlock, closeParameterBlock
 use MOM_forcing_type,  only : mech_forcing
 use MOM_grid,          only : ocean_grid_type
 use MOM_hor_index,     only : hor_index_type
@@ -360,12 +361,16 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
     ! Force Code Intervention
     call MOM_error(FATAL,"Should you be enabling Lagrangian Mixing? Code not ready.")
   endif
+  call openParameterBlock(param_file,'KPP')
   call get_param(param_file, mdl, "STOKES_MIXING", CS%StokesMixing, &
                  "Flag to use Stokes Mixing of momentum", default=.false., &
                  do_not_log=.not.use_waves)
+  call closeParameterBlock(param_file)
   if (CS%StokesMixing) then
     ! Force Code Intervention
+#if 0
     call MOM_error(FATAL, "Should you be enabling Stokes Mixing? Code not ready.")
+#endif
   endif
   call get_param(param_file, mdl, "CORIOLIS_STOKES", CS%CoriolisStokes, &
                  "Flag to use Coriolis Stokes acceleration", default=.false., &
@@ -555,7 +560,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
   allocate(CS%La_turb(G%isc:G%iec,G%jsc:G%jec), source=0.0)
   ! d. Viscosity for Stokes drift
   if (CS%StokesMixing) then
-    allocate(CS%KvS(G%isd:G%Ied,G%jsd:G%jed,GV%ke), source=0.0)
+    print *, 'DBG MOM_wave_interface.F90:   allocating KvS'
+    allocate(CS%KvS(G%isd:G%Ied,G%jsd:G%jed,GV%ke+1), source=0.0)
   endif
 
   ! Initialize Wave related outputs
