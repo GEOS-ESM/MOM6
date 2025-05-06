@@ -382,22 +382,22 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
 
   call get_param(param_file, mdl, "STOKES_VF", CS%Stokes_VF, &
        "Flag to use Stokes vortex force", &
-       Default=.false.)
+       default=.false.)
   call get_param(param_file, mdl, "PASSIVE_STOKES_VF", CS%Passive_Stokes_VF, &
        "Flag to make Stokes vortex force diagnostic only.", &
-       Default=.false.)
+       default=.false.)
   call get_param(param_file, mdl, "STOKES_PGF", CS%Stokes_PGF, &
        "Flag to use Stokes-induced pressure gradient anomaly", &
-       Default=.false.)
+       default=.false.)
   call get_param(param_file, mdl, "PASSIVE_STOKES_PGF", CS%Passive_Stokes_PGF, &
        "Flag to make Stokes-induced pressure gradient anomaly diagnostic only.", &
-       Default=.false.)
+       default=.false.)
   call get_param(param_file, mdl, "STOKES_DDT", CS%Stokes_DDT, &
        "Flag to use Stokes d/dt", &
-       Default=.false.)
+       default=.false.)
   call get_param(param_file, mdl, "PASSIVE_STOKES_DDT", CS%Passive_Stokes_DDT, &
        "Flag to make Stokes d/dt diagnostic only", &
-       Default=.false.)
+       default=.false.)
 
   ! Get Wave Method and write to integer WaveMethod
   call get_param(param_file,mdl,"WAVE_METHOD",TMPSTRING1,             &
@@ -557,7 +557,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
   allocate(CS%US0_x(G%isdB:G%iedB,G%jsd:G%jed), source=0.0)
   allocate(CS%US0_y(G%isd:G%ied,G%jsdB:G%jedB), source=0.0)
   ! c. Langmuir number
-  allocate(CS%La_turb(G%isc:G%iec,G%jsc:G%jec), source=0.0)
+  allocate(CS%La_turb(G%isd:G%ied,G%jsd:G%jed), source=0.0)
   ! d. Viscosity for Stokes drift
   if (CS%StokesMixing) then
     print *, 'DBG MOM_wave_interface.F90:   allocating KvS'
@@ -990,6 +990,19 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
     enddo
   enddo
 
+  print *, 'DBG: MOM_wave_interface: ustar   = ', minval(ustar(G%isc:G%iec,G%jsc:G%jec)), maxval(ustar(G%isc:G%iec,G%jsc:G%jec))
+  print *, 'DBG: MOM_wave_interface: La_turb = ', minval(CS%La_turb(G%isc:G%iec,G%jsc:G%jec)), maxval(CS%La_turb(G%isc:G%iec,G%jsc:G%jec))
+
+  print *, 'DBG: MOM_wave_interface: US0_x = ', minval(CS%US0_x(G%isc:G%iec,G%jsc:G%jec)), maxval(CS%US0_x(G%isc:G%iec,G%jsc:G%jec))
+  print *, 'DBG: MOM_wave_interface: US0_y = ', minval(CS%US0_y(G%isc:G%iec,G%jsc:G%jec)), maxval(CS%US0_y(G%isc:G%iec,G%jsc:G%jec))
+
+  print *, 'DBG: MOM_wave_interface: STKx0 = ', minval(CS%STKx0(G%isc:G%iec,G%jsc:G%jec,:)), maxval(CS%STKx0(G%isc:G%iec,G%jsc:G%jec,:))
+  print *, 'DBG: MOM_wave_interface: STKy0 = ', minval(CS%STKy0(G%isc:G%iec,G%jsc:G%jec,:)), maxval(CS%STKy0(G%isc:G%iec,G%jsc:G%jec,:))
+
+
+
+
+
   ! Finding tendency of Stokes drift over the time step to apply
   !  as an acceleration to the models current.
   if ( dynamics_step .and. CS%Stokes_DDT ) then
@@ -1233,6 +1246,8 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, dz, Waves, &
     call Get_SL_Average_Band(GV, Dpt_LASL, Waves%NumBands, Waves%WaveNum_Cen, StkBand_Y, LA_STKy )
     LA_STK = sqrt((LA_STKX**2) + (LA_STKY**2))
     deallocate(StkBand_X, StkBand_Y)
+
+    ! print *, "DBG: MOM_wave_interface LA_STK = ", LA_STK
   elseif (Waves%WaveMethod==DHH85) then
     ! Temporarily integrating profile rather than spectrum for simplicity
     do k = 1,GV%ke
@@ -1255,12 +1270,18 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, dz, Waves, &
     ! We shouldn't expect values lower than this, but there is also no good reason to cap it here
     ! other than to prevent large enhancements in unconstrained parts of the curve fit parameterizations.
     LA = max(Waves%La_min, sqrt(US%Z_to_L*ustar / (LA_STK + Waves%La_Stk_backgnd)))
+    !! print *, "DBG: MOM_wave_interface LA     = ", LA, ustar, LA_STK
   endif
 
   if (Use_MA) then
     WaveDirection = atan2(LA_STKy, LA_STKx)
     LA = LA / sqrt(max(1.e-8, cos( WaveDirection - ShearDirection)))
   endif
+
+
+  if (abs(ustar) > 1e-6) then
+      print *, 'DBG MOM_wave_interface.F90 ustar, La_stk = ', ustar, LA_STK
+  end if
 
 end subroutine get_Langmuir_Number
 

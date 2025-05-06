@@ -442,7 +442,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
 
 #if defined COUPLE_MOM6_AND_WAVES
   !! WW3 ?
-  print *, '*** DBG: forces = ', OS%forces%initialized, associated(OS%forces%ustkb), OS%Waves%NumBands
+! print *, '*** DBG: forces = ', OS%forces%initialized, associated(OS%forces%ustkb), OS%Waves%NumBands
 
 !  call allocate_mech_forcing(OS%grid, OS%forces, waves=.true., num_stk_bands=3)
 !  print *, '*** DBG: forces = ', OS%forces%initialized, associated(OS%forces%ustkb), OS%Waves%NumBands
@@ -624,48 +624,13 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
     ! the wave intensities are actually used to drive mixing.  At some point, the wave updates
     ! might also need to become a part of the ocean dynamics, according to B. Reichl.
 
-#define COUPLE_MOM6_AND_WAVES 
 #if defined COUPLE_MOM6_AND_WAVES
     !! WW3 ?
-    print *, '*** DBG: forces = ', OS%forces%initialized, associated(OS%forces%ustkb)
+    !print *, '*** DBG: forces = ', OS%forces%initialized, associated(OS%forces%ustkb)
 
-    !OS%forces%stk_wavenumbers = [0.04, 0.11, 0.33]
-    !OS%forces%ustkb=1.0
-    !OS%forces%vstkb=1.0
-
-    !call pass_var(OS%forces%ustkb(:,:,1), OS%grid%domain)
-    !call pass_var(OS%forces%vstkb(:,:,1), OS%grid%domain)
-    !call pass_var(OS%forces%ustkb(:,:,2), OS%grid%domain)
-    !call pass_var(OS%forces%vstkb(:,:,2), OS%grid%domain)
-    !call pass_var(OS%forces%ustkb(:,:,3), OS%grid%domain)
-    !call pass_var(OS%forces%vstkb(:,:,3), OS%grid%domain)
-
-
-    !! call query_ocean_state(OS, use_waves=use_waves, wave_method=wave_method)
-    !! if (use_waves) then
-    !!   if (wave_method == "SURFACE_BANDS") then
-    !!     call query_ocean_state(OS, NumWaveBands=Ice_ocean_boundary%num_stk_bands)
-    !!     allocate(Ice_ocean_boundary%ustkb(isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), source=0.0)
-    !!     allocate(Ice_ocean_boundary%vstkb(isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), source=0.0)
-    !!     allocate(Ice_ocean_boundary%stk_wavenumbers(Ice_ocean_boundary%num_stk_bands), source=0.0)
-    !!     call query_ocean_state(ocean_state, WaveNumbers=Ice_ocean_boundary%stk_wavenumbers, unscale=.true.)
-    !!   else
-    !!     call MOM_error(FATAL, "Unsupported WAVE_METHOD encountered in NUOPC cap.")
-    !!   endif
-    !! endif
-    !! ! Consider adding this:
-    !! ! if (.not.use_waves) Ice_ocean_boundary%num_stk_bands = 0
-
-
-
-    !! OS%forces%stk_wavenumbers = [0.04, 0.11, 0.33]
-    !! OS%forces%ustkb = 0.0 
-    !! OS%forces%vstkb = 0.0
-
-    print *, 'DBG: ocean_model_MOM.F90 OS%forces%stk_wavenumbers = ', minval(OS%forces%stk_wavenumbers), maxval(OS%forces%stk_wavenumbers)
+    !print *, 'DBG: ocean_model_MOM.F90 OS%forces%stk_wavenumbers = ', minval(OS%forces%stk_wavenumbers), maxval(OS%forces%stk_wavenumbers)
     print *, 'DBG: ocean_model_MOM.F90 OS%forces%ustkb = ', minval(OS%forces%ustkb), maxval(OS%forces%ustkb)
     print *, 'DBG: ocean_model_MOM.F90 OS%forces%vstkb = ', minval(OS%forces%vstkb), maxval(OS%forces%vstkb)
-
 
     call Update_Surface_Waves(OS%grid, OS%GV, OS%US, OS%time, ocean_coupling_time_step, OS%waves, OS%forces)
 #else

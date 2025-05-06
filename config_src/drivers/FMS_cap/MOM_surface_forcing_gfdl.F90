@@ -646,9 +646,18 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   endif
 
   ! Set the wind stresses and ustar.
+  print *, 'DBG: which stresses are allocated?  fluxes%ustar      = ', associated(fluxes%ustar)
+  print *, 'DBG: which stresses are allocated?  fluxes%ustar_gust = ', associated(fluxes%ustar_gustless)
+  print *, 'DBG: which stresses are allocated?  fluxes%tau_mag    = ', associated(fluxes%tau_mag)
+
+
   if (associated(fluxes%ustar) .and. associated(fluxes%ustar_gustless) .and. associated(fluxes%tau_mag)) then
+    print *, 'DBG getting all stress related vars'
     call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, ustar=fluxes%ustar, &
                               mag_tau=fluxes%tau_mag, gustless_ustar=fluxes%ustar_gustless)
+    print *, 'DBG value of exctracted ustar      = ', minval(fluxes%ustar), maxval(fluxes%ustar)
+    print *, 'DBG value of exctracted ustar_gust = ', minval(fluxes%ustar_gustless), maxval(fluxes%ustar_gustless)
+    print *, 'DBG value of exctracted tau_mag    = ', minval(fluxes%tau_mag), maxval(fluxes%tau_mag)
   else
     if (associated(fluxes%ustar)) &
       call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, ustar=fluxes%ustar)
@@ -876,13 +885,14 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
      ) then
 
     forces%stk_wavenumbers = IOB%stk_wavenumbers * US%Z_to_m
+    
+    i0 = is - isc_bnd ; j0 = js - jsc_bnd
     do istk = 1, size(IOB%stk_wavenumbers)
       do j=js,je; do i=is,ie
-        forces%ustkb(i,j,istk) = IOB%ustkb(i-i0,j-j0,istk) * US%m_s_to_L_T
-        forces%vstkb(i,j,istk) = IOB%vstkb(i-i0,j-j0,istk) * US%m_s_to_L_T
+        forces%ustkb(i,j,istk) = IOB%ustkb(i-i0,j-j0,istk) !* US%m_s_to_L_T
+        forces%vstkb(i,j,istk) = IOB%vstkb(i-i0,j-j0,istk) !* US%m_s_to_L_T
       enddo; enddo
-      call pass_var(forces%ustkb(:,:,istk), G%domain )
-      call pass_var(forces%vstkb(:,:,istk), G%domain )
+      call pass_vector(forces%ustkb(:,:,istk), forces%vstkb(:,:,istk), G%domain, stagger=AGRID)
     enddo
   endif
 #endif
@@ -1045,6 +1055,8 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         enddo ; enddo
       endif
     elseif (wind_stagger == AGRID) then
+      print *, 'DBG code path #1'
+
       taux_in_A(:,:) = 0.0 ; tauy_in_A(:,:) = 0.0
       if (associated(IOB%u_flux).and.associated(IOB%v_flux)) then
         do j=js,je ; do i=is,ie

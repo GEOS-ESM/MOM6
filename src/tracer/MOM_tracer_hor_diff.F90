@@ -240,7 +240,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
 #else
         if (allocated(MEKE%Kh)) then
           if ( MEKE%Kh(i,j) * MEKE%Kh(i+1,j) < 0.0 ) then
-              print *, 'DBG ', i, j, MEKE%Kh(i,j)*MEKE%Kh(i+1,j), MEKE%Kh(i,j), MEKE%Kh(i+1,j)
+              !print *, 'DBG MOM_tracer_hor_diff MEKE', i, j, MEKE%Kh(i,j)*MEKE%Kh(i+1,j)
           end if
           Kh_loc = Kh_loc + MEKE%KhTr_fac*sqrt(abs(MEKE%Kh(i,j)*MEKE%Kh(i+1,j)))
         end if

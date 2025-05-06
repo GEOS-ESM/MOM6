@@ -562,6 +562,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     if (stoch_CS%id_epbl2_wts > 0) call post_data(stoch_CS%id_epbl2_wts, stoch_CS%epbl2_wts, CS%diag)
   endif
 
+  if (allocated(CS%La)) then
+      print *, 'DBG ePBL LA = ', minval(CS%LA(is:ie,js:je)), maxval(CS%LA(is:ie,js:je))
+  end if
+
 end subroutine energetic_PBL
 
 
@@ -922,6 +926,7 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
       if (CS%Use_LT) then
         call get_Langmuir_Number(LA, G, GV, US, abs(MLD_guess), u_star_mean, i, j, dz, Waves, &
                                  U_H=u, V_H=v)
+        print *, 'DBG ePBL u_star_mean, LA = ', i, j, u_star_mean, LA
         call find_mstar(CS, US, B_flux, u_star, MLD_guess, absf, &
                         MStar_total, Langmuir_Number=La, Convect_Langmuir_Number=LAmod,&
                         mstar_LT=mstar_LT)

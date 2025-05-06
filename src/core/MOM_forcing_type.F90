@@ -1177,6 +1177,8 @@ subroutine find_ustar_fluxes(fluxes, tv, U_star, G, GV, US, halo, H_T_units)
     enddo ; enddo
   endif
 
+  print *, 'DBG MOM_forcing_type.F90:find_ustar_fluxes() ustar = ', minval(U_star), maxval(U_star)
+
 end subroutine find_ustar_fluxes
 
 
@@ -1242,6 +1244,13 @@ subroutine find_ustar_mech_forcing(forces, tv, U_star, G, GV, US, halo, H_T_unit
       U_star(i,j) = sqrt(forces%tau_mag(i,j) * I_rho)
     enddo ; enddo
   endif
+
+  print *, 'DBG MOM_forcing_type.F90:find_ustar_mech_forcing() ustar = ', minval(U_star(is:ie,js:je)), maxval(U_star(is:ie,js:je))
+  print *, 'DBG MOM_forcing_type.F90:find_ustar_mech_forcing() associated(forces%ustar)   = ', associated(forces%ustar) 
+  print *, 'DBG MOM_forcing_type.F90:find_ustar_mech_forcing() associated(forces%tau_mag) = ', associated(forces%tau_mag) 
+
+
+
 
 end subroutine find_ustar_mech_forcing
 
