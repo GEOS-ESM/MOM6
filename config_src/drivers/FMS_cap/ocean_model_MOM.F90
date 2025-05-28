@@ -80,6 +80,7 @@ public ocean_model_data_get
 public get_ocean_grid
 public ocean_model_get_UV_surf
 public ocean_model_get_thickness
+public ocean_model_put_prog_tracer
 public ocean_model_get_prog_tracer
 public ocean_model_get_prog_tracer_index
 
@@ -1279,6 +1280,27 @@ subroutine ocean_model_get_prog_tracer_index(OS, index, name)
 
 end subroutine ocean_model_get_prog_tracer_index
 
+! Modify prognostic tracer data for external generic tracers
+subroutine ocean_model_put_prog_tracer(OS, index, array)
+  type(ocean_state_type), pointer     :: OS
+  integer, intent(in)                 :: index
+  real, dimension(:,:,:), intent(in)  :: array
+  integer                             :: isc, iec, jsc, jec, isd, ied, jsd, jed
+  type(tracer_type), dimension(:), pointer :: T_prog => NULL()
+
+  if (.not.associated(OS)) return
+  if (.not.OS%is_ocean_pe) return
+
+  call get_domain_extent(OS%grid%Domain, isc, iec, jsc, jec, isd, ied, jsd, jed)
+
+  T_prog => OS%Reg%tr
+
+  T_prog(index)%t(isc:iec,jsc:jec,:)=array
+
+  call pass_var(T_prog(index)%t(:,:,:), OS%grid%domain)
+
+end subroutine ocean_model_put_prog_tracer
+
 ! Return prognostic tracer data
 subroutine ocean_model_get_prog_tracer(OS, index, array, is, js, units, longname)
   type(ocean_state_type), pointer          :: OS
@@ -1319,8 +1341,7 @@ subroutine ocean_model_get_thickness(OS, array, is, js)
   integer, intent(in)                      :: is
   integer, intent(in)                      :: js
   real,    intent(out)                     :: array(is:,js:,:)
-  integer                                  :: isc, iec, jsc, jec, nk, i, j, k, &
-                                              isd, ied, jsd, jed
+  integer                                  :: isc, iec, jsc, jec, isd, ied, jsd, jed
 
   if (.not.associated(OS)) return
   if (.not.OS%is_ocean_pe) return
