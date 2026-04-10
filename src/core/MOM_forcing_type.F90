@@ -1540,7 +1540,7 @@ end subroutine forcing_SinglePointPrint
 
 !> Register members of the forcing type for diagnostics
 subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles, use_berg_fluxes, use_waves, &
-                                       use_cfcs, use_glc_runoff)
+                                       use_cfcs, use_MARBL_tracers, use_glc_runoff)
   type(time_type),     intent(in)    :: Time            !< time type
   type(diag_ctrl),     intent(inout) :: diag            !< diagnostic control type
   type(unit_scale_type), intent(in)  :: US              !< A dimensional unit scaling type
@@ -1549,7 +1549,17 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   logical, optional,   intent(in)    :: use_berg_fluxes !< If true, allow iceberg flux diagnostics
   logical, optional,   intent(in)    :: use_waves       !< If true, allow wave forcing diagnostics
   logical, optional,   intent(in)    :: use_cfcs        !< If true, allow cfc related diagnostics
+  logical, optional,   intent(in)    :: use_MARBL_tracers  !< If true, allow MARBL related diagnostics
   logical, optional,   intent(in)    :: use_glc_runoff  !< If true, allow separate glacial runoff diagnostics
+
+  logical :: use_cfcs_or_MARBL_tracers
+
+  ! some diagnostics should be registered if either cfc or MARBL tracers are enabled
+  use_cfcs_or_MARBL_tracers = .false.
+  if (present(use_cfcs)) &
+    use_cfcs_or_MARBL_tracers = use_cfcs_or_MARBL_tracers .or. use_cfcs
+  if (present(use_MARBL_tracers)) &
+    use_cfcs_or_MARBL_tracers = use_cfcs_or_MARBL_tracers .or. use_MARBL_tracers
 
   ! Clock for forcing diagnostics
   handles%id_clock_forcing=cpu_clock_id('(Ocean forcing diagnostics)', grain=CLOCK_ROUTINE)
@@ -1599,15 +1609,12 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
     endif
   endif
 
-  ! See:
-  if (present(use_cfcs)) then
-    if (use_cfcs) then
-      handles%id_ice_fraction = register_diag_field('ocean_model', 'ice_fraction', diag%axesT1, Time, &
-          'Fraction of cell area covered by sea ice', 'm2 m-2', conversion=1.0)
+  if (use_cfcs_or_MARBL_tracers) then
+    handles%id_ice_fraction = register_diag_field('ocean_model', 'ice_fraction', diag%axesT1, Time, &
+        'Fraction of cell area covered by sea ice', 'm2 m-2', conversion=1.0)
 
-      handles%id_u10_sqr = register_diag_field('ocean_model', 'u10_sqr', diag%axesT1, Time, &
-          'Wind magnitude at 10m, squared', 'm2 s-2', conversion=US%L_to_m**2*US%s_to_T**2)
-    endif
+    handles%id_u10_sqr = register_diag_field('ocean_model', 'u10_sqr', diag%axesT1, Time, &
+        'Wind magnitude at 10m, squared', 'm2 s-2', conversion=US%L_to_m**2*US%s_to_T**2)
   endif
 
   handles%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time, &
@@ -2338,7 +2345,7 @@ subroutine fluxes_accumulate(flux_tmp, fluxes, G, wt2, forces)
   ! applied based on the time interval stored in flux_tmp.
 
   real :: wt1  ! The relative weight of the previous fluxes [nondim]
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, n
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   is   = G%isc   ; ie   = G%iec    ; js   = G%jsc   ; je   = G%jec
   Isq  = G%IscB  ; Ieq  = G%IecB   ; Jsq  = G%JscB  ; Jeq  = G%JecB
@@ -2496,6 +2503,59 @@ subroutine fluxes_accumulate(flux_tmp, fluxes, G, wt2, forces)
   if (associated(fluxes%frac_shelf_h) .and. associated(flux_tmp%frac_shelf_h)) then
     do i=isd,ied ; do j=jsd,jed
       fluxes%frac_shelf_h(i,j)  = flux_tmp%frac_shelf_h(i,j)
+    enddo ; enddo
+  endif
+
+  ! Forcings introduced for MARBL
+  ! NOTE: fluxes%salt_flux, %sw, and %p_surf_full are handled above
+  if (associated(fluxes%nhx_dep) .and. associated(flux_tmp%nhx_dep)) then
+    do j=jsd,jed ; do i=isd,ied
+      fluxes%nhx_dep(i,j)  = wt1*fluxes%nhx_dep(i,j) + wt2*flux_tmp%nhx_dep(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%noy_dep) .and. associated(flux_tmp%noy_dep)) then
+    do j=jsd,jed ; do i=isd,ied
+      fluxes%noy_dep(i,j)  = wt1*fluxes%noy_dep(i,j) + wt2*flux_tmp%noy_dep(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%atm_co2) .and. associated(flux_tmp%atm_co2)) then
+    do j=jsd,jed ; do i=isd,ied
+      fluxes%atm_co2(i,j)  = wt1*fluxes%atm_co2(i,j) + wt2*flux_tmp%atm_co2(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%atm_alt_co2) .and. associated(flux_tmp%atm_alt_co2)) then
+    do j=jsd,jed ; do i=isd,ied
+      fluxes%atm_alt_co2(i,j)  = wt1*fluxes%atm_alt_co2(i,j) + wt2*flux_tmp%atm_alt_co2(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%dust_flux) .and. associated(flux_tmp%dust_flux)) then
+    do j=jsd,jed ; do i=isd,ied
+      fluxes%dust_flux(i,j)  = wt1*fluxes%dust_flux(i,j) + wt2*flux_tmp%dust_flux(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%iron_flux) .and. associated(flux_tmp%iron_flux)) then
+    do j=jsd,jed ; do i=isd,ied
+      fluxes%iron_flux(i,j)  = wt1*fluxes%iron_flux(i,j) + wt2*flux_tmp%iron_flux(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%fracr_cat) .and. associated(flux_tmp%fracr_cat)) then
+    do n=1,size(fluxes%fracr_cat,dim=3) ; do j=jsd,jed ; do i=isd,ied
+      fluxes%fracr_cat(i,j,n)  = wt1*fluxes%fracr_cat(i,j,n) + wt2*flux_tmp%fracr_cat(i,j,n)
+    enddo ; enddo ; enddo
+  endif
+  if (associated(fluxes%qsw_cat) .and. associated(flux_tmp%qsw_cat)) then
+    do n=1,size(fluxes%qsw_cat,dim=3) ; do j=jsd,jed ; do i=isd,ied
+      fluxes%qsw_cat(i,j,n)  = wt1*fluxes%qsw_cat(i,j,n) + wt2*flux_tmp%qsw_cat(i,j,n)
+    enddo ; enddo ; enddo
+  endif
+  if (associated(fluxes%ice_fraction) .and. associated(flux_tmp%ice_fraction)) then
+    do j=jsd,jed ; do i=isd,ied
+      fluxes%ice_fraction(i,j)  = wt1*fluxes%ice_fraction(i,j) + wt2*flux_tmp%ice_fraction(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%u10_sqr) .and. associated(flux_tmp%u10_sqr)) then
+    do j=jsd,jed ; do i=isd,ied
+      fluxes%u10_sqr(i,j)  = wt1*fluxes%u10_sqr(i,j) + wt2*flux_tmp%u10_sqr(i,j)
     enddo ; enddo
   endif
 

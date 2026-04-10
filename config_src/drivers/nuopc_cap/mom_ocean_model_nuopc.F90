@@ -564,13 +564,13 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   if (OS%fluxes%fluxes_used) then
 
-    ! enable_averages() is necessary to post forcing fields to diagnostics
-    call enable_averages(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag)
-
     if (do_thermo) &
       call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, dt_coupling, &
                                OS%grid, OS%US, OS%forcing_CSp, OS%sfc_state, &
-                               OS%restore_salinity, OS%restore_temp)
+                               OS%restore_salinity, OS%restore_temp, Ocean_coupling_time_step)
+
+    ! enable_averages() is necessary to post forcing fields to diagnostics
+    call enable_averages(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag)
 
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then

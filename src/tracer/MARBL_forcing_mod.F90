@@ -7,7 +7,8 @@ module MARBL_forcing_mod
 !! (This comment can go in the wiki on the NCAR fork?)
 
 use MOM_diag_mediator,        only : safe_alloc_ptr, diag_ctrl, register_diag_field, post_data
-use MOM_time_manager,         only : time_type
+use MOM_diag_mediator,        only : enable_averages, disable_averaging
+use MOM_time_manager,         only : time_type, operator(+)
 use MOM_error_handler,        only : MOM_error, WARNING, FATAL
 use MOM_file_parser,          only : get_param, log_param, param_file_type
 use MOM_grid,                 only : ocean_grid_type
@@ -173,7 +174,8 @@ contains
                                                seaice_dust_flux, atm_bc_flux, seaice_bc_flux, &
                                                nhx_dep, noy_dep, atm_co2_prog, atm_co2_diag, &
                                                afracr, swnet_afracr, ifrac_n, &
-                                               swpen_ifrac_n, Time, G, US, i0, j0, fluxes, CS)
+                                               swpen_ifrac_n, Time, G, US, i0, j0, fluxes, CS, &
+                                               Ocean_coupling_time_step)
 
     real, dimension(:,:),   pointer, intent(in)    :: atm_fine_dust_flux   !< atmosphere fine dust flux from IOB
                                                                            !! [kg m-2 s-1]
@@ -184,13 +186,13 @@ contains
                                                                            !! [kg m-2 s-1]
     real, dimension(:,:),   pointer, intent(in)    :: seaice_bc_flux       !< sea ice black carbon flux from IOB
                                                                            !! [kg m-2 s-1]
-    real, dimension(:,:),   pointer, intent(in)    :: afracr               !< open ocean fraction [1]
     real, dimension(:,:),   pointer, intent(in)    :: nhx_dep              !< NHx flux from atmosphere [kg m-2 s-1]
     real, dimension(:,:),   pointer, intent(in)    :: noy_dep              !< NOy flux from atmosphere [kg m-2 s-1]
     real, dimension(:,:),   pointer, intent(in)    :: atm_co2_prog         !< Prognostic atmospheric CO2 concentration
                                                                            !! [ppm]
     real, dimension(:,:),   pointer, intent(in)    :: atm_co2_diag         !< Diagnostic atmospheric CO2 concentration
                                                                            !! [ppm]
+    real, dimension(:,:),   pointer, intent(in)    :: afracr               !< open ocean fraction [1]
     real, dimension(:,:),   pointer, intent(in)    :: swnet_afracr         !< shortwave flux * open ocean fraction
                                                                            !! [W m-2]
     real, dimension(:,:,:), pointer, intent(in)    :: ifrac_n              !< per-category ice fraction [1]
@@ -207,6 +209,8 @@ contains
     type(forcing),                   intent(inout) :: fluxes               !< MARBL-specific forcing fields
     type(marbl_forcing_CS), pointer, intent(inout) :: CS                   !< A pointer that is set to point to
                                                                            !! control structure for MARBL forcing
+    type(time_type),       optional, intent(in)    :: Ocean_coupling_time_step  !< The amount of time over
+                                                                                !! which to advance the ocean.
 
     integer :: i, j, is, ie, js, je, m
     real :: atm_fe_bioavail_frac     !< Fraction of iron from the atmosphere available for biological uptake [1]
@@ -227,21 +231,25 @@ contains
 
     ! Post fields from coupler to diagnostics
     ! TODO: units from diag register are incorrect; we should be converting these in the cap, I think
-    if (CS%diag_ids%atm_fine_dust > 0) &
-      call post_data(CS%diag_ids%atm_fine_dust, atm_fine_dust_flux(is-i0:ie-i0,js-j0:je-j0), &
-          CS%diag, mask=G%mask2dT(is:ie,js:je))
-    if (CS%diag_ids%atm_coarse_dust > 0) &
-      call post_data(CS%diag_ids%atm_coarse_dust, atm_coarse_dust_flux(is-i0:ie-i0,js-j0:je-j0), &
-          CS%diag, mask=G%mask2dT(is:ie,js:je))
-    if (CS%diag_ids%atm_bc > 0) &
-      call post_data(CS%diag_ids%atm_bc, atm_bc_flux(is-i0:ie-i0,js-j0:je-j0), CS%diag, &
-          mask=G%mask2dT(is:ie,js:je))
-    if (CS%diag_ids%ice_dust > 0) &
-      call post_data(CS%diag_ids%ice_dust, seaice_dust_flux(is-i0:ie-i0,js-j0:je-j0), CS%diag, &
-          mask=G%mask2dT(is:ie,js:je))
-    if (CS%diag_ids%ice_bc > 0) &
-      call post_data(CS%diag_ids%ice_bc, seaice_bc_flux(is-i0:ie-i0,js-j0:je-j0), CS%diag, &
-          mask=G%mask2dT(is:ie,js:je))
+    if (present(Ocean_coupling_time_step)) then
+      call enable_averages(fluxes%dt_buoy_accum, Time + Ocean_coupling_time_step, CS%diag)
+      if (CS%diag_ids%atm_fine_dust > 0) &
+        call post_data(CS%diag_ids%atm_fine_dust, atm_fine_dust_flux(is-i0:ie-i0,js-j0:je-j0), &
+            CS%diag, mask=G%mask2dT(is:ie,js:je))
+      if (CS%diag_ids%atm_coarse_dust > 0) &
+        call post_data(CS%diag_ids%atm_coarse_dust, atm_coarse_dust_flux(is-i0:ie-i0,js-j0:je-j0), &
+            CS%diag, mask=G%mask2dT(is:ie,js:je))
+      if (CS%diag_ids%atm_bc > 0) &
+        call post_data(CS%diag_ids%atm_bc, atm_bc_flux(is-i0:ie-i0,js-j0:je-j0), CS%diag, &
+            mask=G%mask2dT(is:ie,js:je))
+      if (CS%diag_ids%ice_dust > 0) &
+        call post_data(CS%diag_ids%ice_dust, seaice_dust_flux(is-i0:ie-i0,js-j0:je-j0), CS%diag, &
+            mask=G%mask2dT(is:ie,js:je))
+      if (CS%diag_ids%ice_bc > 0) &
+        call post_data(CS%diag_ids%ice_bc, seaice_bc_flux(is-i0:ie-i0,js-j0:je-j0), CS%diag, &
+            mask=G%mask2dT(is:ie,js:je))
+      call disable_averaging(CS%diag)
+    endif
 
     do j=js,je ; do i=is,ie
       ! Nitrogen Deposition
