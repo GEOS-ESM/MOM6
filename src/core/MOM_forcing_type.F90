@@ -234,7 +234,12 @@ type, public :: forcing
     atm_co2 => NULL(),               & !< Atmospheric CO2 Concentration [ppm]
     atm_alt_co2 => NULL(),           & !< Alternate atmospheric CO2 Concentration [ppm]
     dust_flux => NULL(),             & !< Flux of dust into the ocean [R Z T-1 ~> kgN m-2 s-1]
-    iron_flux => NULL()                !< Flux of dust into the ocean [conc Z T-1 ~> conc m s-1]
+    iron_flux => NULL(),             & !< Flux of dust into the ocean [conc Z T-1 ~> conc m s-1]
+    atm_fine_dust_flux => NULL(),    & !< Fine dust flux from atmosphere [R Z T-1 ~> kg m-2 s-1]
+    atm_coarse_dust_flux => NULL(),  & !< Coarse dust flux from atmosphere [R Z T-1 ~> kg m-2 s-1]
+    seaice_dust_flux => NULL(),      & !< Dust flux from seaice [R Z T-1 ~> kg m-2 s-1]
+    atm_bc_flux => NULL(),           & !< Black carbon flux from atmosphere [R Z T-1 ~> kg m-2 s-1]
+    seaice_bc_flux => NULL()           !< Black carbon flux from seaice [R Z T-1 ~> kg m-2 s-1]
 
   real, pointer, dimension(:,:,:) :: &
     fracr_cat   => NULL(),           & !< per-category ice fraction [nondim]
@@ -421,6 +426,11 @@ type, public :: forcing_diags ; private
   ! tracer surface flux related diagnostics handles
   integer :: id_ice_fraction = -1
   integer :: id_u10_sqr      = -1
+  integer :: id_atm_fine_dust_flux = -1
+  integer :: id_atm_coarse_dust_flux = -1
+  integer :: id_atm_bc_flux = -1
+  integer :: id_seaice_dust_flux = -1
+  integer :: id_seaice_bc_flux = -1
 
   ! iceberg diagnostic handles
   integer :: id_ustar_berg = -1
@@ -1617,6 +1627,26 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
         'Wind magnitude at 10m, squared', 'm2 s-2', conversion=US%L_to_m**2*US%s_to_T**2)
   endif
 
+  if (present(use_MARBL_tracers)) then
+    if (use_MARBL_tracers) then
+      handles%id_atm_fine_dust_flux = register_diag_field('ocean_model', 'ATM_FINE_DUST_FLUX_CPL', &
+          diag%axesT1, Time, 'ATM_FINE_DUST_FLUX from cpl', 'kg m-2 s', &
+          conversion=US%RZ_T_to_kg_m2s)
+      handles%id_atm_coarse_dust_flux = register_diag_field('ocean_model', 'ATM_COARSE_DUST_FLUX_CPL', &
+          diag%axesT1, Time, 'ATM_COARSE_DUST_FLUX from cpl', 'kg m-2 s', &
+          conversion=US%RZ_T_to_kg_m2s)
+      handles%id_atm_bc_flux = register_diag_field('ocean_model', 'ATM_BLACK_CARBON_FLUX_CPL', &
+          diag%axesT1, Time, 'ATM_BLACK_CARBON_FLUX from cpl',  'kg m-2 s', &
+          conversion=US%RZ_T_to_kg_m2s)
+
+      handles%id_seaice_dust_flux = register_diag_field('ocean_model', 'SEAICE_DUST_FLUX_CPL', &
+          diag%axesT1, Time, 'SEAICE_DUST_FLUX from cpl', 'kg m-2 s', &
+          conversion=US%RZ_T_to_kg_m2s)
+      handles%id_seaice_bc_flux = register_diag_field('ocean_model', 'SEAICE_BLACK_CARBON_FLUX_CPL', &
+          diag%axesT1, Time, 'SEAICE_BLACK_CARBON_FLUX from cpl', 'kg m-2 s', &
+          conversion=US%RZ_T_to_kg_m2s)
+    end if
+  end if
   handles%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time, &
         'Pressure at ice-ocean or atmosphere-ocean interface', &
         'Pa', conversion=US%RL2_T2_to_Pa, cmor_field_name='pso', &
@@ -2538,6 +2568,31 @@ subroutine fluxes_accumulate(flux_tmp, fluxes, G, wt2, forces)
       fluxes%iron_flux(i,j)  = wt1*fluxes%iron_flux(i,j) + wt2*flux_tmp%iron_flux(i,j)
     enddo ; enddo
   endif
+  if (associated(fluxes%atm_fine_dust_flux) .and. associated(flux_tmp%atm_fine_dust_flux)) then
+    do j=jsd,jed ; do i=isd,ied
+      fluxes%atm_fine_dust_flux(i,j)  = wt1*fluxes%atm_fine_dust_flux(i,j) + wt2*flux_tmp%atm_fine_dust_flux(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%atm_coarse_dust_flux) .and. associated(flux_tmp%atm_coarse_dust_flux)) then
+    do j=jsd,jed ; do i=isd,ied
+      fluxes%atm_coarse_dust_flux(i,j)  = wt1*fluxes%atm_coarse_dust_flux(i,j) + wt2*flux_tmp%atm_coarse_dust_flux(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%atm_bc_flux) .and. associated(flux_tmp%atm_bc_flux)) then
+    do j=jsd,jed ; do i=isd,ied
+      fluxes%atm_bc_flux(i,j)  = wt1*fluxes%atm_bc_flux(i,j) + wt2*flux_tmp%atm_bc_flux(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%seaice_dust_flux) .and. associated(flux_tmp%seaice_dust_flux)) then
+    do j=jsd,jed ; do i=isd,ied
+      fluxes%seaice_dust_flux(i,j)  = wt1*fluxes%seaice_dust_flux(i,j) + wt2*flux_tmp%seaice_dust_flux(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%seaice_bc_flux) .and. associated(flux_tmp%seaice_bc_flux)) then
+    do j=jsd,jed ; do i=isd,ied
+      fluxes%seaice_bc_flux(i,j)  = wt1*fluxes%seaice_bc_flux(i,j) + wt2*flux_tmp%seaice_bc_flux(i,j)
+    enddo ; enddo
+  endif
   if (associated(fluxes%fracr_cat) .and. associated(flux_tmp%fracr_cat)) then
     do n=1,size(fluxes%fracr_cat,dim=3) ; do j=jsd,jed ; do i=isd,ied
       fluxes%fracr_cat(i,j,n)  = wt1*fluxes%fracr_cat(i,j,n) + wt2*flux_tmp%fracr_cat(i,j,n)
@@ -3426,6 +3481,21 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if ((handles%id_u10_sqr > 0) .and. associated(fluxes%u10_sqr)) &
       call post_data(handles%id_u10_sqr, fluxes%u10_sqr, diag)
 
+    if ((handles%id_atm_fine_dust_flux > 0) .and. associated(fluxes%atm_fine_dust_flux)) &
+      call post_data(handles%id_atm_fine_dust_flux, fluxes%atm_fine_dust_flux, diag)
+
+    if ((handles%id_atm_coarse_dust_flux > 0) .and. associated(fluxes%atm_coarse_dust_flux)) &
+      call post_data(handles%id_atm_coarse_dust_flux, fluxes%atm_coarse_dust_flux, diag)
+
+    if ((handles%id_atm_bc_flux > 0) .and. associated(fluxes%atm_bc_flux)) &
+      call post_data(handles%id_atm_bc_flux, fluxes%atm_bc_flux, diag)
+
+    if ((handles%id_seaice_dust_flux > 0) .and. associated(fluxes%seaice_dust_flux)) &
+      call post_data(handles%id_seaice_dust_flux, fluxes%seaice_dust_flux, diag)
+
+    if ((handles%id_seaice_bc_flux > 0) .and. associated(fluxes%seaice_bc_flux)) &
+      call post_data(handles%id_seaice_bc_flux, fluxes%seaice_bc_flux, diag)
+
     ! remaining boundary terms ==================================================
 
     if ((handles%id_psurf > 0) .and. associated(fluxes%p_surf))                      &
@@ -3595,6 +3665,11 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   call myAlloc(fluxes%atm_alt_co2,isd,ied,jsd,jed, marbl)
   call myAlloc(fluxes%dust_flux,isd,ied,jsd,jed, marbl)
   call myAlloc(fluxes%iron_flux,isd,ied,jsd,jed, marbl)
+  call myAlloc(fluxes%atm_fine_dust_flux,isd,ied,jsd,jed, marbl)
+  call myAlloc(fluxes%atm_coarse_dust_flux,isd,ied,jsd,jed, marbl)
+  call myAlloc(fluxes%atm_bc_flux,isd,ied,jsd,jed, marbl)
+  call myAlloc(fluxes%seaice_dust_flux,isd,ied,jsd,jed, marbl)
+  call myAlloc(fluxes%seaice_bc_flux,isd,ied,jsd,jed, marbl)
 
   ! These fields should only be allocated when receiving multiple ice categories
   if (present(ice_ncat)) then
@@ -3901,6 +3976,11 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%atm_alt_co2))          deallocate(fluxes%atm_alt_co2)
   if (associated(fluxes%dust_flux))            deallocate(fluxes%dust_flux)
   if (associated(fluxes%iron_flux))            deallocate(fluxes%iron_flux)
+  if (associated(fluxes%atm_fine_dust_flux))   deallocate(fluxes%atm_fine_dust_flux)
+  if (associated(fluxes%atm_coarse_dust_flux)) deallocate(fluxes%atm_coarse_dust_flux)
+  if (associated(fluxes%atm_bc_flux))          deallocate(fluxes%atm_bc_flux)
+  if (associated(fluxes%seaice_dust_flux))     deallocate(fluxes%seaice_dust_flux)
+  if (associated(fluxes%seaice_bc_flux))       deallocate(fluxes%seaice_bc_flux)
   if (associated(fluxes%fracr_cat))            deallocate(fluxes%fracr_cat)
   if (associated(fluxes%qsw_cat))              deallocate(fluxes%qsw_cat)
 

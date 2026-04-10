@@ -247,7 +247,7 @@ contains
 !! thermodynamic forcing type, including changes of units, sign conventions,
 !! and putting the fields into arrays with MOM-standard halos.
 subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G, US, CS, &
-                                 sfc_state, restore_salt, restore_temp, Ocean_coupling_time_step)
+                                 sfc_state, restore_salt, restore_temp)
   type(ice_ocean_boundary_type), &
                    target, intent(in)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
                                                    !! the ocean in a coupled model
@@ -265,10 +265,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
                                                    !! previous call to surface_forcing_init.
   type(surface),           intent(in)    :: sfc_state !< A structure containing fields that describe the
                                                    !! surface state of the ocean.
-  logical,         optional, intent(in)   :: restore_salt !< If true, salinity is restored to a target value.
-  logical,         optional, intent(in)   :: restore_temp !< If true, temperature is restored to a target value.
-  type(time_type), optional, intent(in)   :: Ocean_coupling_time_step  !< The amount of time over
-                                                                       !! which to advance the ocean.
+  logical,       optional, intent(in)    :: restore_salt !< If true, salinity is restored to a target value.
+  logical,       optional, intent(in)    :: restore_temp !< If true, temperature is restored to a target value.
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -622,8 +620,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
                                            IOB%seaice_dust_flux, IOB%atm_bc_flux, IOB%seaice_bc_flux, &
                                            IOB%nhx_dep, IOB%noy_dep, IOB%atm_co2_prog, IOB%atm_co2_diag, &
                                            IOB%afracr, IOB%swnet_afracr, IOB%ifrac_n, IOB%swpen_ifrac_n, &
-                                           Time, G, US, i0, j0, fluxes, CS%marbl_forcing_CSp,            &
-                                           Ocean_coupling_time_step)
+                                           Time, G, US, i0, j0, fluxes, CS%marbl_forcing_CSp)
 
   ! wave to ocean coupling
   if ( associated(IOB%lamult)) then
