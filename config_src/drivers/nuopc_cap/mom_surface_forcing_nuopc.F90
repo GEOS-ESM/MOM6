@@ -1470,7 +1470,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
 
   call register_forcing_type_diags(Time, diag, US, CS%use_temperature, CS%handles, &
                                    use_berg_fluxes=iceberg_flux_diags, use_waves=use_waves, &
-                                   use_cfcs=CS%use_CFC, use_glc_runoff=glc_runoff_diags)
+                                   use_cfcs=CS%use_CFC, use_MARBL_tracers=CS%use_MARBL_tracers, &
+                                    use_glc_runoff=glc_runoff_diags)
 
   call get_param(param_file, mdl, "ALLOW_FLUX_ADJUSTMENTS", CS%allow_flux_adjustments, &
                  "If true, allows flux adjustments to specified via the "//&
