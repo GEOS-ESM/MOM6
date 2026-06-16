@@ -274,8 +274,8 @@ subroutine stochastics_init(dt, grid, GV, US, CS, param_file, diag, Time)
     enddo ; enddo
     do j=grid%jsc-1,grid%jec+1 ; do i=grid%isc-1,grid%iec+1
       sum_area_wts = CS%area_wt(i,j) + &
-       (((CS%area_wt(i-1,j) + CS%area_wt(i+1,j)) + (CS%area_wt(i,j-1) + CS%area_wt(i,j+1))) + &
-        ((CS%area_wt(i-1,j-1) + CS%area_wt(i+1,j+1)) + (CS%area_wt(i-1,j+1) + CS%area_wt(i+1,j-1))))
+          (((CS%area_wt(i-1,j) + CS%area_wt(i+1,j)) + (CS%area_wt(i,j-1) + CS%area_wt(i,j+1))) + &
+           ((CS%area_wt(i-1,j-1) + CS%area_wt(i+1,j+1)) + (CS%area_wt(i-1,j+1) + CS%area_wt(i+1,j-1))))
       CS%Isum_area_wts(i,j) = 1.0 / (sum_area_wts + 1.e-16*US%m_to_L**2)
     enddo ; enddo
   endif
